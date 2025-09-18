@@ -24,7 +24,8 @@ import { Nav } from "./nav";
 import { useTheme } from "next-themes";
 import { ScrollArea } from "./ui/scroll-area";
 
-const labels = {
+// Default labels for known categories
+const defaultLabels: Record<string, React.ReactNode> = {
   pinned: (
     <>
       <Pin className="inline-block w-4 h-4 mr-1" /> Pinned
@@ -37,7 +38,8 @@ const labels = {
   older: "Older",
 };
 
-const categoryOrder = ["pinned", "today", "yesterday", "7", "30", "older"];
+// Default order for time-based categories
+const timeBasedOrder = ["pinned", "today", "yesterday", "7", "30", "older"];
 
 export default function Sidebar({
   notes: publicNotes,
@@ -67,6 +69,10 @@ export default function Sidebar({
   );
   const [highlightedNote, setHighlightedNote] = useState<Note | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [dynamicCategories, setDynamicCategories] = useState<string[]>([]);
+  const [dynamicLabels, setDynamicLabels] = useState<
+    Record<string, React.ReactNode>
+  >({});
 
   const commandMenuRef = useRef<{ setOpen: (open: boolean) => void } | null>(
     null
@@ -78,11 +84,13 @@ export default function Sidebar({
 
   useEffect(() => {
     if (selectedNoteSlug && scrollViewportRef.current) {
-      const selectedElement = scrollViewportRef.current.querySelector(`[data-note-slug="${selectedNoteSlug}"]`);
+      const selectedElement = scrollViewportRef.current.querySelector(
+        `[data-note-slug="${selectedNoteSlug}"]`
+      );
       if (selectedElement) {
         selectedElement.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest'
+          behavior: "smooth",
+          block: "nearest",
         });
       }
     }
@@ -91,8 +99,8 @@ export default function Sidebar({
   useEffect(() => {
     if (selectedNoteRef.current) {
       selectedNoteRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest'
+        behavior: "smooth",
+        block: "nearest",
       });
     }
   }, [selectedNoteSlug, highlightedIndex]);
@@ -155,6 +163,32 @@ export default function Sidebar({
     const grouped = groupNotesByCategory(userSpecificNotes, pinnedNotes);
     sortGroupedNotes(grouped);
     setGroupedNotes(grouped);
+
+    // Build dynamic category order and labels
+    const categories = Object.keys(grouped);
+    const publicCategories = categories
+      .filter((cat) => !timeBasedOrder.includes(cat) && cat !== "pinned")
+      .sort(); // Sort alphabetically for consistency
+
+    // Build final category order: pinned -> public categories -> time-based
+    const finalOrder = [
+      "pinned",
+      ...publicCategories,
+      ...timeBasedOrder.slice(1), // Skip 'pinned' since it's already at the start
+    ].filter((cat) => categories.includes(cat)); // Only include categories that have notes
+
+    setDynamicCategories(finalOrder);
+
+    // Build labels map
+    const labels: Record<string, React.ReactNode> = { ...defaultLabels };
+    publicCategories.forEach((cat) => {
+      // Format category name nicely if it's not in defaultLabels
+      if (!labels[cat]) {
+        // Convert category to Title Case
+        labels[cat] = cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase();
+      }
+    });
+    setDynamicLabels(labels);
   }, [notes, sessionId, pinnedNotes]);
 
   useEffect(() => {
@@ -175,10 +209,10 @@ export default function Sidebar({
   }, [setLocalSearchResults, setHighlightedIndex]);
 
   const flattenedNotes = useCallback(() => {
-    return categoryOrder.flatMap((category) =>
+    return dynamicCategories.flatMap((category) =>
       groupedNotes[category] ? groupedNotes[category] : []
     );
-  }, [groupedNotes]);
+  }, [groupedNotes, dynamicCategories]);
 
   const navigateNotes = useCallback(
     (direction: "up" | "down") => {
@@ -187,7 +221,7 @@ export default function Sidebar({
         const currentIndex = flattened.findIndex(
           (note) => note.slug === selectedNoteSlug
         );
-        
+
         let nextIndex;
         if (direction === "up") {
           nextIndex =
@@ -198,14 +232,19 @@ export default function Sidebar({
         }
 
         const nextNote = flattened[nextIndex];
-        
+
         if (nextNote) {
           router.push(`/notes/${nextNote.slug}`);
           // Wait for router navigation and React re-render
           setTimeout(() => {
-            const selectedElement = document.querySelector(`[data-note-slug="${nextNote.slug}"]`);
+            const selectedElement = document.querySelector(
+              `[data-note-slug="${nextNote.slug}"]`
+            );
             if (selectedElement) {
-              selectedElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              selectedElement.scrollIntoView({
+                behavior: "smooth",
+                block: "nearest",
+              });
             }
           }, 100);
         }
@@ -315,8 +354,13 @@ export default function Sidebar({
       const selectedNote = localSearchResults[highlightedIndex];
       router.push(`/notes/${selectedNote.slug}`);
       setTimeout(() => {
-        const selectedElement = document.querySelector(`[data-note-slug="${selectedNote.slug}"]`);
-        selectedElement?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        const selectedElement = document.querySelector(
+          `[data-note-slug="${selectedNote.slug}"]`
+        );
+        selectedElement?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
       }, 0);
       clearSearch();
     }
@@ -430,11 +474,11 @@ export default function Sidebar({
           isScrolled={isScrolled}
         />
       </div>
-      <ScrollArea 
-        className="flex-1" 
+      <ScrollArea
+        className="flex-1"
         onScrollCapture={(e: React.UIEvent<HTMLDivElement>) => {
           const viewport = e.currentTarget.querySelector(
-            '[data-radix-scroll-area-viewport]'
+            "[data-radix-scroll-area-viewport]"
           );
           if (viewport) {
             const scrolled = viewport.scrollTop > 0;
@@ -476,8 +520,8 @@ export default function Sidebar({
               pinnedNotes={pinnedNotes}
               localSearchResults={localSearchResults}
               highlightedIndex={highlightedIndex}
-              categoryOrder={categoryOrder}
-              labels={labels}
+              categoryOrder={dynamicCategories}
+              labels={dynamicLabels}
               handleNoteDelete={handleNoteDelete}
               openSwipeItemSlug={openSwipeItemSlug}
               setOpenSwipeItemSlug={setOpenSwipeItemSlug}
